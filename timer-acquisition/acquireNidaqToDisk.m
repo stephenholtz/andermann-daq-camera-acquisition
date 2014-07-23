@@ -19,15 +19,14 @@ daqreset;
 %--------------------------------------------------------------------------
 % Edit for each animal/experiment change
 %--------------------------------------------------------------------------
-animalName      = 'FakeMouse00';
-expName         = 'retinotopy_run_1';
+animalName      = 'K69';
+expName         = 'ML-v1';
 
 % Send triggers for qimaging acquisition @ some rate (Hz)
 triggerQimagingCCD  = 0;
 qImagingCCDRateHz   = 30; 
-
 % Send triggers for Mightex / ptGrey acquisition @ some rate (Hz)
-triggerMightexCam   = 1;
+triggerMightexCam   = 0;
 mightexCameraRateHz = 15;
 triggerPtGreyCam    = 0;
 ptGreyCameraRateHz  = 40;
@@ -60,7 +59,7 @@ logFileID = fopen(fullfile(daqSaveDir,daqSaveFile),'w');
 dS.addlistener('DataAvailable',@(src,evt)logDaqData(src,evt,logFileID));
 
 % Add Analog Channels / names for documentation
-aI = dS.addAnalogInputChannel(devID,[0 1 2 3],'Voltage');
+aI = dS.addAnalogInputChannel(devID,[0 1 2 3 4],'Voltage');
 aI(1).Name = 'LED Stim Output';
 aI(2).Name = 'Psych Toolbox Output';
 aI(3).Name = 'Lick Port Output';
@@ -68,20 +67,33 @@ aI(4).Name = 'Reward (To Solenoid 1)';
 aI(5).Name = 'Punishment (To Solenoid 2)';
 
 % Add Digital Channels / names for documentation
-dIO = dS.addDigitalChannel(devID,{'Port0/Line0:5'},'Bidirectional');
+dIO = dS.addDigitalChannel(devID,{'Port0/Line0:7'},'Bidirectional');
 dIO(1).Name = 'Q-Imaging Wide-field CCD SyncB'; 
 dIO(2).Name = 'Q-Imaging Wide-field CCD Trigger';
 dIO(3).Name = 'PointGrey Whisker Tracking Strobe In';
 dIO(4).Name = 'PointGrey Whisker Tracking Trigger';
 dIO(5).Name = 'Mightex Eye Tracking Strobe In';
 dIO(6).Name = 'Mightex Eye Tracking Trigger';
+dIO(7).Name = 'none';
+dIO(8).Name = 'Monkeylogic Word (Behavioral Code) Strobe In';
+
+% dIO(9).Name     = 'Monkeylogic Bit 1';
+% dIO(10).Name    = 'Monkeylogic Bit 2';
+% dIO(11).Name    = 'Monkeylogic Bit 3';
+% dIO(12).Name    = 'Monkeylogic Bit 4';
+% dIO(13).Name    = 'Monkeylogic Bit 5';
+
+% % Use these lines instead of regular counter channel for flexibility
+% dIO(14).Name    = 'Ball Quadrature A';
+% dIO(15).Name    = 'Ball Quadrature B';
+% dIO(16).Name    = 'Ball Quadrature Z';
+
+% Add Counter Channels / names for documentation
+%cI = dS.addCounterInputChannel(devID,[3],'Position');
+%cI(1).Name = 'Ball Quadrature';
 
 % By default set all to Input
 set(dIO(:),'Direction','Input')
-
-% Add Counter Channels / names for documentation
-cI = dS.addCounterInputChannel(devID,[3],'Position');
-cI(1).Name = 'Ball Quadrature';
 
 %--------------------------------------------------------------------------
 %-Optional daq devices: camera triggers + timing functions etc-------------
@@ -157,10 +169,13 @@ fprintf('daqLogFile: ..%s%s\n\n', filesep, daqSaveFile);
 fprintf('Loading logged data into workspace... ')
 
 logFileID = fopen(fullfile(daqSaveDir,daqSaveFile),'r');
+
+nDaqChans = numel(dIO) + numel(aI);
 [exp.Data,exp.Count] = fread(logFileID,[nDaqChans,inf],'double');
 [~] = fclose(logFileID);
-exp.daqInfo = get(dS);
-save(matSaveFile,'exp');
 
+exp.daqChID     = {dS.Channels(:).ID};
+exp.daqChName   = {dS.Channels(:).Name};
+save(fullfile(daqSaveDir,matSaveFile),'exp');
 fprintf('saved as .mat file.\n')
 fprintf('\tdaqMatFile: ..%s%s\n\n', filesep, matSaveFile);
