@@ -11,6 +11,8 @@
 % SLH
 %#ok<*NBRAK,*UNRCH>
 
+%% Initialization
+
 % Close DAQ connections and reset acquisition devices
 close all force; 
 clear all force;
@@ -47,19 +49,19 @@ end
 %--------------------------------------------------------------------------
 %-Base daq devices and channels--------------------------------------------
 %--------------------------------------------------------------------------
-dS = daq.createSession('ni');
+niIn = daq.createSession('ni');
 % Determine devID with daq.GetDevices or NI's MAX software
 devID = 'Dev1';
 
 % Continuously acquire to log file at 10kHz
-dS.Rate         = 10E3;
-dS.IsContinuous = true;
+niIn.Rate         = 10E3;
+niIn.IsContinuous = true;
 
 logFileID = fopen(fullfile(daqSaveDir,daqSaveFile),'w');
-dS.addlistener('DataAvailable',@(src,evt)logDaqData(src,evt,logFileID));
+niIn.addlistener('DataAvailable',@(src,evt)logDaqData(src,evt,logFileID));
 
 % Add Analog Channels / names for documentation
-aI = dS.addAnalogInputChannel(devID,[0 1 2 3 4],'Voltage');
+aI = niIn.addAnalogInputChannel(devID,[0 1 2 3 4],'Voltage');
 aI(1).Name = 'LED Stim Output';
 aI(2).Name = 'Psych Toolbox Output';
 aI(3).Name = 'Lick Port Output';
@@ -67,33 +69,35 @@ aI(4).Name = 'Reward (To Solenoid 1)';
 aI(5).Name = 'Punishment (To Solenoid 2)';
 
 % Add Digital Channels / names for documentation
-dIO = dS.addDigitalChannel(devID,{'Port0/Line0:7'},'Bidirectional');
+dIO = niIn.addDigitalChannel(devID,{'Port0/Line0:7'},'Bidirectional');
 dIO(1).Name = 'Q-Imaging Wide-field CCD SyncB'; 
-dIO(2).Name = 'Q-Imaging Wide-field CCD Trigger';
-dIO(3).Name = 'PointGrey Whisker Tracking Strobe In';
-dIO(4).Name = 'PointGrey Whisker Tracking Trigger';
-dIO(5).Name = 'Mightex Eye Tracking Strobe In';
-dIO(6).Name = 'Mightex Eye Tracking Trigger';
-dIO(7).Name = 'none';
-dIO(8).Name = 'Monkeylogic Word (Behavioral Code) Strobe In';
-
-% dIO(9).Name     = 'Monkeylogic Bit 1';
-% dIO(10).Name    = 'Monkeylogic Bit 2';
-% dIO(11).Name    = 'Monkeylogic Bit 3';
-% dIO(12).Name    = 'Monkeylogic Bit 4';
-% dIO(13).Name    = 'Monkeylogic Bit 5';
-
-% % Use these lines instead of regular counter channel for flexibility
-% dIO(14).Name    = 'Ball Quadrature A';
-% dIO(15).Name    = 'Ball Quadrature B';
-% dIO(16).Name    = 'Ball Quadrature Z';
-
-% Add Counter Channels / names for documentation
-%cI = dS.addCounterInputChannel(devID,[3],'Position');
-%cI(1).Name = 'Ball Quadrature';
+dIO(2).Name = 'PointGrey Whisker Tracking Strobe In';
+dIO(3).Name = 'Mightex Eye Tracking Strobe In';
+dIO(4).Name = 'Monkeylogic Word (Behavioral Code) Strobe In';
+dIO(5).Name = 'Monkeylogic Bit 1';
+dIO(6).Name = 'Monkeylogic Bit 2';
+dIO(7).Name = 'Monkeylogic Bit 3';
+dIO(8).Name = 'Monkeylogic Bit 4';
 
 % By default set all to Input
 set(dIO(:),'Direction','Input')
+
+% Separate Device for triggers, in this case they are non-clocked 
+% operations. This should generate a warning about clocked operations on 
+% most X series. Port 1 == PFI 1 
+niTrig  = daq.createSession('ni');
+dTrig   = niTrig.addDigitalChannel(devID,{'Port1/Line0:3'},'OutputOnly');
+dTrig(1).Name = 'Q-Imaging Wide-field CCD Trigger';
+dTrig(2).Name = 'PointGrey Whisker Tracking Trigger';
+dTrig(3).Name = 'Mightex Eye Tracking Trigger';
+dTrig(4).Name = 'none'; % Save for laser
+
+% Add Counter Channels / names for documentation
+%   CTR 3 A - PFI 5
+%   CTR 3 Z - PFI 6
+%   CTR 3 B - PFI 7
+cI = niIn.addCounterInputChannel(devID,[3],'Position');
+cI(1).Name = 'Ball Quadrature';
 
 %--------------------------------------------------------------------------
 %-Optional daq devices: camera triggers + timing functions etc-------------
@@ -101,39 +105,41 @@ set(dIO(:),'Direction','Input')
 
 % Use timer function for the CCD, needs to agree with the rates in software
 if triggerQimagingCCD
-    qImagingTriggerPort = 2;
+    qImagingTriggerPort = 1;
     qImagingTriggerVerbose = 0;
     % Change the trigger line to output
     set(dIO(qImagingTriggerPort),'Direction','Output') 
 
     tFCCD = timer('ExecutionMode','fixedDelay','BusyMode','queue','Period',1/qImagingCCDRateHz);
     tFCCD.StartDelay = 1;
-    tFCCD.TimerFcn = {@sendAcqTrigger,dS,qImagingTriggerPort,qImagingTriggerVerbose};
+    tFCCD.TimerFcn = {@sendAcqTrigger,niTrig,qImagingTriggerPort,qImagingTriggerVerbose};
 end
 
 % Use timer functions to send +5V triggers to PTGrey camera @ some rate
 if triggerPtGreyCam
-    ptGreyTriggerPort = 4;
+    ptGreyTriggerPort = 2;
     ptGreyTriggerVerbose = 0;
     % Change the trigger line to output
     set(dIO(ptGreyTriggerPort),'Direction','Output')
 
     tFptGrey = timer('ExecutionMode','fixedDelay','BusyMode','queue','Period',1/ptGreyCameraRateHz);
     tFptGrey.StartDelay = 1;
-    tFptGrey.TimerFcn = {@sendAcqTrigger,dS,ptGreyTriggerPort,ptGreyTriggerVerbose};
+    tFptGrey.TimerFcn = {@sendAcqTrigger,niTrig,ptGreyTriggerPort,ptGreyTriggerVerbose};
 end
 
 % Use timer functions to send +5V triggers to Mightex camera @ some rate
 if triggerMightexCam
-    mightexTriggerPort = 6;
+    mightexTriggerPort = 3;
     mightexTriggerVerbose = 0;
     % Change the trigger line to output
     set(dIO(mightexTriggerPort),'Direction','Output')
 
     tFCam = timer('ExecutionMode','fixedDelay','BusyMode','queue','Period',1/mightexCameraRateHz);
     tFCam.StartDelay = 1;
-    tFCam.TimerFcn = {@sendAcqTrigger,dS,mightexTriggerPort,mightexTriggerVerbose};
+    tFCam.TimerFcn = {@sendAcqTrigger,niTrig,mightexTriggerPort,mightexTriggerVerbose};
 end
+
+%% Running 
 
 %--------------------------------------------------------------------------
 %-Begin / end acquisition using timer funcitons----------------------------
@@ -141,8 +147,8 @@ end
 % Use timer functions to start and stop acquisition (silly syntax!)
 tFAcq = timer();
 tFAcq.Period = 1;
-tFAcq.StartFcn = {@startAcqWithInput,dS};
-tFAcq.TimerFcn = {@stopAcqWithInput,dS};
+tFAcq.StartFcn = {@startAcqWithInput,niIn};
+tFAcq.TimerFcn = {@stopAcqWithInput,niIn};
 
 % Acquisition will quit using timer function prompts
 start(tFAcq)
@@ -160,6 +166,8 @@ delete(timerfindall)
 
 [~] = fclose(logFileID);
 
+%% Save / Cleanup
+
 % Display savepaths / filenames
 fprintf('\tAcquisition complete.\n\n')
 fprintf('daqSaveDir: %s\n', daqSaveDir);
@@ -174,8 +182,8 @@ nDaqChans = numel(dIO) + numel(aI);
 [exp.Data,exp.Count] = fread(logFileID,[nDaqChans,inf],'double');
 [~] = fclose(logFileID);
 
-exp.daqChID     = {dS.Channels(:).ID};
-exp.daqChName   = {dS.Channels(:).Name};
-save(fullfile(daqSaveDir,matSaveFile),'exp');
+exp.daqChID     = {niIn.Channels(:).ID};
+exp.daqChName   = {niIn.Channels(:).Name};
+save(fullfile(daqSaveDir,matSaveFile),'exp','-v7.3');
 fprintf('saved as .mat file.\n')
 fprintf('\tdaqMatFile: ..%s%s\n\n', filesep, matSaveFile);
