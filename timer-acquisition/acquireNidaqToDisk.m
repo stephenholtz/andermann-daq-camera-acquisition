@@ -14,24 +14,30 @@
 %% Initialization
 
 % Close DAQ connections and reset acquisition devices
-close all force; 
-clear all force;
 daqreset;
+
+forceClear = 1;
+if forceClear
+    close all force; 
+    clear all force;
+end
 
 %--------------------------------------------------------------------------
 % Edit for each animal/experiment change
 %--------------------------------------------------------------------------
-animalName      = 'K69';
-expName         = 'ML-v1';
+animalName      = 'RS2';
+expName         = 'ML-progress-check';
 
-% Send triggers for qimaging acquisition @ some rate (Hz)
+% Send triggers for qimaging acquisition @ some rate (rate potentially
+% determined by other software)
 triggerQimagingCCD  = 0;
 qImagingCCDRateHz   = 30; 
-% Send triggers for Mightex / ptGrey acquisition @ some rate (Hz)
-triggerMightexCam   = 0;
+% Send triggers for Mightex (rate is defined by trigger rate)
+triggerMightexCam   = 1;
 mightexCameraRateHz = 15;
-triggerPtGreyCam    = 0;
-ptGreyCameraRateHz  = 40;
+% Sent start trigger for Point Grey camera acquisition (rate potentially
+% defined by other software)
+triggerPtGreyCam    = 1;
 
 %--------------------------------------------------------------------------
 %-Set up filepaths for logging---------------------------------------------
@@ -54,7 +60,7 @@ niIn = daq.createSession('ni');
 devID = 'Dev1';
 
 % Continuously acquire to log file at 10kHz
-niIn.Rate         = 10E3;
+niIn.Rate         = 50E4;
 niIn.IsContinuous = true;
 
 logFileID = fopen(fullfile(daqSaveDir,daqSaveFile),'w');
@@ -82,11 +88,14 @@ dIO(8).Name = 'Monkeylogic Bit 4';
 % By default set all to Input
 set(dIO(:),'Direction','Input')
 
-% Separate Device for triggers, in this case they are non-clocked 
-% operations. This should generate a warning about clocked operations on 
-% most X series. Port 1 == PFI 1 
-niTrig  = daq.createSession('ni');
-dTrig   = niTrig.addDigitalChannel(devID,{'Port1/Line0:3'},'OutputOnly');
+% Separate Device for triggers, in this case they are non-clocked
+% operations (hence the IsNotifyWhenScansQueuedBelowAuto is off). This
+% should generate a warning about clocked operations on most X series. 
+niTrig = daq.createSession('ni');
+niTrig.IsNotifyWhenScansQueuedBelowAuto = false;
+niTrig.NotifyWhenScansQueuedBelow = 1;
+% Port1 == PFI1
+dTrig = niTrig.addDigitalChannel(devID,{'Port1/Line1:4'},'OutputOnly');
 dTrig(1).Name = 'Q-Imaging Wide-field CCD Trigger';
 dTrig(2).Name = 'PointGrey Whisker Tracking Trigger';
 dTrig(3).Name = 'Mightex Eye Tracking Trigger';
@@ -107,23 +116,17 @@ cI(1).Name = 'Ball Quadrature';
 if triggerQimagingCCD
     qImagingTriggerPort = 1;
     qImagingTriggerVerbose = 0;
-    % Change the trigger line to output
-    set(dIO(qImagingTriggerPort),'Direction','Output') 
-
     tFCCD = timer('ExecutionMode','fixedDelay','BusyMode','queue','Period',1/qImagingCCDRateHz);
-    tFCCD.StartDelay = 1;
+    tFCCD.StartDelay = 2;
     tFCCD.TimerFcn = {@sendAcqTrigger,niTrig,qImagingTriggerPort,qImagingTriggerVerbose};
 end
 
-% Use timer functions to send +5V triggers to PTGrey camera @ some rate
+% Use timer functions to send +5V triggers to start PTGrey camera (Mode 15)
 if triggerPtGreyCam
     ptGreyTriggerPort = 2;
     ptGreyTriggerVerbose = 0;
-    % Change the trigger line to output
-    set(dIO(ptGreyTriggerPort),'Direction','Output')
-
-    tFptGrey = timer('ExecutionMode','fixedDelay','BusyMode','queue','Period',1/ptGreyCameraRateHz);
-    tFptGrey.StartDelay = 1;
+    tFptGrey = timer('ExecutionMode','singleShot','BusyMode','queue');
+    tFptGrey.StartDelay = 2;
     tFptGrey.TimerFcn = {@sendAcqTrigger,niTrig,ptGreyTriggerPort,ptGreyTriggerVerbose};
 end
 
@@ -131,11 +134,8 @@ end
 if triggerMightexCam
     mightexTriggerPort = 3;
     mightexTriggerVerbose = 0;
-    % Change the trigger line to output
-    set(dIO(mightexTriggerPort),'Direction','Output')
-
     tFCam = timer('ExecutionMode','fixedDelay','BusyMode','queue','Period',1/mightexCameraRateHz);
-    tFCam.StartDelay = 1;
+    tFCam.StartDelay = 2;
     tFCam.TimerFcn = {@sendAcqTrigger,niTrig,mightexTriggerPort,mightexTriggerVerbose};
 end
 
@@ -144,46 +144,63 @@ end
 %--------------------------------------------------------------------------
 %-Begin / end acquisition using timer funcitons----------------------------
 %--------------------------------------------------------------------------
-% Use timer functions to start and stop acquisition (silly syntax!)
-tFAcq = timer();
-tFAcq.Period = 1;
-tFAcq.StartFcn = {@startAcqWithInput,niIn};
-tFAcq.TimerFcn = {@stopAcqWithInput,niIn};
+% Simple pause to start acquisition
+fprintf('====================================\n')
+fprintf('Start Acquisition With Any Key Press\n')
+fprintf('====================================\n')
+pause();
 
 % Acquisition will quit using timer function prompts
-start(tFAcq)
+niIn.startBackground();
+fprintf('Acquisition started.\n')
 
-% Start sending other triggers, all of which have start delays and will not 
-% collide with an error.
+% Start checking for acquisition termination and sending triggers, all of
+% which have start delays and will not collide with an error.
 if triggerQimagingCCD;  start(tFCCD);   end
 if triggerPtGreyCam;    start(tFptGrey);end
 if triggerMightexCam;   start(tFCam);   end
+if (triggerQimagingCCD || triggerPtGreyCam || triggerMightexCam)
+    fprintf('Triggers started.\n')
+end
+fprintf('\n')
 
-pause(1)
-wait(tFAcq)
+continueExp = 1;
+while continueExp
+    pause(2)
+    userInput = input(['Stop Acquisition By Entering Q/q/E/e: '],'s');
+    if ~isempty(userInput) && (sum([lower(userInput) == 'qe']) > 0)
+        continueExp = 0;
+    end
+end 
+
 stop(timerfindall)
 delete(timerfindall)
+niIn.stop;
 
 [~] = fclose(logFileID);
 
 %% Save / Cleanup
 
 % Display savepaths / filenames
-fprintf('\tAcquisition complete.\n\n')
-fprintf('daqSaveDir: %s\n', daqSaveDir);
-fprintf('daqLogFile: ..%s%s\n\n', filesep, daqSaveFile);
+fprintf('\nAcquisition complete.\n')
+fprintf('\tdaqSaveDir: %s\n', daqSaveDir);
+fprintf('\tdaqLogFile: ..%s%s\n\n', filesep, daqSaveFile);
 
 % Load in data and save as mat file for lab compatability
 fprintf('Loading logged data into workspace... ')
 
 logFileID = fopen(fullfile(daqSaveDir,daqSaveFile),'r');
 
-nDaqChans = numel(dIO) + numel(aI);
-[exp.Data,exp.Count] = fread(logFileID,[nDaqChans,inf],'double');
+nDaqChans = numel(dIO) + numel(aI) + numel(cI);
+exp.Data = fread(logFileID,'double');
+exp.Data = reshape(exp.Data,nDaqChans+1,[]);
+exp.Count = exp.Data(1,:);
+exp.Data = exp.Data(2:end,:);
 [~] = fclose(logFileID);
 
-exp.daqChID     = {niIn.Channels(:).ID};
-exp.daqChName   = {niIn.Channels(:).Name};
+exp.daqInIDs    = {niIn.Channels(:).ID};
+exp.daqInNames  = {niIn.Channels(:).Name};
+
 save(fullfile(daqSaveDir,matSaveFile),'exp','-v7.3');
 fprintf('saved as .mat file.\n')
 fprintf('\tdaqMatFile: ..%s%s\n\n', filesep, matSaveFile);
