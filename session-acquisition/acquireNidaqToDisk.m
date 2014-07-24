@@ -6,7 +6,9 @@
 % Additionally sends out 5V triggers for acquisition from connected
 % cameras.
 %
-% NOTE: Mightex camera works with 5V in spite of documentation!
+% NOTE: Mightex camera works with 5V trig in spite of documentation.
+% However, the TTL pulsewidth is very small, so a counter might be 
+% needed to mark new frame events.
 % 
 % SLH
 %#ok<*NBRAK,*UNRCH>
@@ -60,7 +62,7 @@ niIn = daq.createSession('ni');
 devID = 'Dev1';
 
 % Continuously acquire to log file at 10kHz
-niIn.Rate         = 50E4;
+niIn.Rate         = 5E3;
 niIn.IsContinuous = true;
 
 logFileID = fopen(fullfile(daqSaveDir,daqSaveFile),'w');
@@ -78,7 +80,7 @@ aI(5).Name = 'Punishment (To Solenoid 2)';
 dIO = niIn.addDigitalChannel(devID,{'Port0/Line0:7'},'Bidirectional');
 dIO(1).Name = 'Q-Imaging Wide-field CCD SyncB'; 
 dIO(2).Name = 'PointGrey Whisker Tracking Strobe In';
-dIO(3).Name = 'Mightex Eye Tracking Strobe In';
+dIO(3).Name = 'Mightex Eye Tracking Strobe In'; % Likely too slow
 dIO(4).Name = 'Monkeylogic Word (Behavioral Code) Strobe In';
 dIO(5).Name = 'Monkeylogic Bit 1';
 dIO(6).Name = 'Monkeylogic Bit 2';
@@ -105,8 +107,12 @@ dTrig(4).Name = 'none'; % Save for laser
 %   CTR 3 A - PFI 5
 %   CTR 3 Z - PFI 6
 %   CTR 3 B - PFI 7
-cI = niIn.addCounterInputChannel(devID,[3],'Position');
-cI(1).Name = 'Ball Quadrature';
+cIBall = niIn.addCounterInputChannel(devID,[3],'Position');
+cIBall(1).Name = 'Ball Quadrature';
+
+% Counter for the strobe off the Mightex Camera -- potentially unused
+cICam = niIn.addCounterInputChannel(devID,[4],'EdgeCount');
+cICam(1).Name = 'Mightex Eye Tracking Strobe Count';
 
 %--------------------------------------------------------------------------
 %-Optional daq devices: camera triggers + timing functions etc-------------
@@ -160,7 +166,7 @@ if triggerQimagingCCD;  start(tFCCD);   end
 if triggerPtGreyCam;    start(tFptGrey);end
 if triggerMightexCam;   start(tFCam);   end
 if (triggerQimagingCCD || triggerPtGreyCam || triggerMightexCam)
-    fprintf('Triggers started.\n')
+    fprintf('Trigger(s) started.\n')
 end
 fprintf('\n')
 
@@ -191,7 +197,7 @@ fprintf('Loading logged data into workspace... ')
 
 logFileID = fopen(fullfile(daqSaveDir,daqSaveFile),'r');
 
-nDaqChans = numel(dIO) + numel(aI) + numel(cI);
+nDaqChans = numel(dIO) + numel(aI) + numel(cIBall) + numel(cICam);
 exp.Data = fread(logFileID,'double');
 exp.Data = reshape(exp.Data,nDaqChans+1,[]);
 exp.Count = exp.Data(1,:);
