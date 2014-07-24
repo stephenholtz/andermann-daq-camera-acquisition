@@ -27,7 +27,7 @@ end
 %--------------------------------------------------------------------------
 % Edit for each animal/experiment change
 %--------------------------------------------------------------------------
-animalName      = 'RS2';
+animalName      = 'K69';
 expName         = 'ML-progress-check';
 
 % Send triggers for qimaging acquisition @ some rate (rate potentially
@@ -60,7 +60,7 @@ end
 niIn = daq.createSession('ni');
 % Determine devID with daq.GetDevices or NI's MAX software
 devID = 'Dev1';
-
+ 
 % Continuously acquire to log file at 10kHz
 niIn.Rate         = 5E3;
 niIn.IsContinuous = true;
@@ -80,12 +80,12 @@ aI(5).Name = 'Punishment (To Solenoid 2)';
 dIO = niIn.addDigitalChannel(devID,{'Port0/Line0:7'},'Bidirectional');
 dIO(1).Name = 'Q-Imaging Wide-field CCD SyncB'; 
 dIO(2).Name = 'PointGrey Whisker Tracking Strobe In';
-dIO(3).Name = 'Mightex Eye Tracking Strobe In'; % Likely too slow
-dIO(4).Name = 'Monkeylogic Word (Behavioral Code) Strobe In';
-dIO(5).Name = 'Monkeylogic Bit 1';
-dIO(6).Name = 'Monkeylogic Bit 2';
-dIO(7).Name = 'Monkeylogic Bit 3';
-dIO(8).Name = 'Monkeylogic Bit 4';
+dIO(3).Name = 'Monkeylogic Word (Behavioral Code) Strobe In';
+dIO(4).Name = 'Monkeylogic Bit 1';
+dIO(5).Name = 'Monkeylogic Bit 2';
+dIO(6).Name = 'Monkeylogic Bit 3';
+dIO(7).Name = 'Monkeylogic Bit 4';
+dIO(8).Name = 'Monkeylogic Bit 5';
 
 % By default set all to Input
 set(dIO(:),'Direction','Input')
@@ -100,18 +100,20 @@ niTrig.NotifyWhenScansQueuedBelow = 1;
 dTrig = niTrig.addDigitalChannel(devID,{'Port1/Line1:4'},'OutputOnly');
 dTrig(1).Name = 'Q-Imaging Wide-field CCD Trigger';
 dTrig(2).Name = 'PointGrey Whisker Tracking Trigger';
-dTrig(3).Name = 'Mightex Eye Tracking Trigger';
-dTrig(4).Name = 'none'; % Save for laser
+dTrig(3).Name = 'Mightex Eye Tracking Trigger'; % Save for future
+dTrig(4).Name = 'none'; % Save for future use
 
 % Add Counter Channels / names for documentation
 %   CTR 3 A - PFI 5
 %   CTR 3 Z - PFI 6
 %   CTR 3 B - PFI 7
 cIBall = niIn.addCounterInputChannel(devID,[3],'Position');
+cIBall.EncoderType = 'X1';
 cIBall(1).Name = 'Ball Quadrature';
 
 % Counter for the strobe off the Mightex Camera -- potentially unused
-cICam = niIn.addCounterInputChannel(devID,[4],'EdgeCount');
+% CTR 0 'EdgeCount' - PFI8
+cICam = niIn.addCounterInputChannel(devID,[0],'EdgeCount');
 cICam(1).Name = 'Mightex Eye Tracking Strobe Count';
 
 %--------------------------------------------------------------------------
