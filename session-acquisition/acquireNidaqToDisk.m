@@ -27,7 +27,7 @@ end
 %--------------------------------------------------------------------------
 % Edit for each animal/experiment change
 %--------------------------------------------------------------------------
-animalName      = 'K69';
+animalName      = 'RS2';
 expName         = 'ML-progress-check';
 
 % Send triggers for qimaging acquisition @ some rate (rate potentially
@@ -206,6 +206,7 @@ exp.Count = exp.Data(1,:);
 exp.Data = exp.Data(2:end,:);
 [~] = fclose(logFileID);
 
+exp.daqRate     = niIn.Rate;
 exp.daqInIDs    = {niIn.Channels(:).ID};
 exp.daqInNames  = {niIn.Channels(:).Name};
 
