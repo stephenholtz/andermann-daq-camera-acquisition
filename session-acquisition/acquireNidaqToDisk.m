@@ -27,13 +27,8 @@ end
 %--------------------------------------------------------------------------
 % Edit for each animal/experiment change
 %--------------------------------------------------------------------------
-<<<<<<< HEAD
 animalName      = 'FAKEMOUSE00';
 expName         = 'USELESSEXP-START';
-=======
-animalName      = 'RS2';
-expName         = 'ML-progress-check';
->>>>>>> 47abeec4d90c8bca21689e9070d1c1de44640c4e
 
 % Send triggers for qimaging acquisition @ some rate (rate potentially
 % determined by other software) currently unimplemented
