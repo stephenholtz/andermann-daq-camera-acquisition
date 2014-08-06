@@ -7,7 +7,7 @@
 % cameras.
 %
 % NOTE: Mightex camera works with 5V trig in spite of documentation.
-% However, the TTL pulsewidth is very small, so a counter might be 
+% However, the TTL pulsewidth is very small, so a counter was 
 % needed to mark new frame events.
 % 
 % SLH
@@ -27,11 +27,11 @@ end
 %--------------------------------------------------------------------------
 % Edit for each animal/experiment change
 %--------------------------------------------------------------------------
-animalName      = 'K69';
-expName         = 'ML-progress-check';
+animalName      = 'FAKEMOUSE00';
+expName         = 'USELESSEXP-START';
 
 % Send triggers for qimaging acquisition @ some rate (rate potentially
-% determined by other software)
+% determined by other software) currently unimplemented
 triggerQimagingCCD  = 0;
 qImagingCCDRateHz   = 30; 
 % Send triggers for Mightex (rate is defined by trigger rate)
@@ -48,8 +48,8 @@ tmpDaqFolderName    = 'C:\temp_daq_data';
 fullDateTime        = datestr(now,30);
 expDate             = fullDateTime(1:8);
 daqSaveDir = fullfile(tmpDaqFolderName,animalName,expDate);
-daqSaveFile = [fullDateTime '_' expName '_' animalName '.dat'];
-matSaveFile = [fullDateTime '_' expName '_' animalName '.mat'];
+daqSaveFile = ['nidaq_' fullDateTime '_' expName '_' animalName '.dat'];
+matSaveFile = ['nidaq_' fullDateTime '_' expName '_' animalName '.mat'];
 if ~exist(daqSaveDir,'dir')
     mkdir(daqSaveDir);
 end
@@ -61,7 +61,8 @@ niIn = daq.createSession('ni');
 % Determine devID with daq.GetDevices or NI's MAX software
 devID = 'Dev1';
  
-% Continuously acquire to log file at 10kHz
+% Continuously acquire to log file at 5kHz (sufficient for all counters 
+% used)
 niIn.Rate         = 5E3;
 niIn.IsContinuous = true;
 
@@ -80,7 +81,7 @@ aI(5).Name = 'Punishment (To Solenoid 2)';
 dIO = niIn.addDigitalChannel(devID,{'Port0/Line0:7'},'Bidirectional');
 dIO(1).Name = 'Q-Imaging Wide-field CCD SyncB'; 
 dIO(2).Name = 'PointGrey Whisker Tracking Strobe In';
-dIO(3).Name = 'Monkeylogic Word (Behavioral Code) Strobe In';
+dIO(3).Name = 'Monkeylogic Behavioral Code Strobe In';
 dIO(4).Name = 'Monkeylogic Bit 1';
 dIO(5).Name = 'Monkeylogic Bit 2';
 dIO(6).Name = 'Monkeylogic Bit 3';
@@ -206,6 +207,7 @@ exp.Count = exp.Data(1,:);
 exp.Data = exp.Data(2:end,:);
 [~] = fclose(logFileID);
 
+exp.daqRate     = niIn.Rate;
 exp.daqInIDs    = {niIn.Channels(:).ID};
 exp.daqInNames  = {niIn.Channels(:).Name};
 
