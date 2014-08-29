@@ -22,20 +22,21 @@ forceClear = 1;
 if forceClear
     close all force; 
     clear all force;
+    daqreset
 end
 
 %--------------------------------------------------------------------------
 % Edit for each animal/experiment change
 %--------------------------------------------------------------------------
-animalName      = 'FAKEMOUSE00';
-expName         = 'USELESSEXP-START';
+animalName  = 'K51';
+expName     = 'ChR2';
 
 % Send triggers for qimaging acquisition @ some rate (rate potentially
 % determined by other software) currently unimplemented
 triggerQimagingCCD  = 0;
-qImagingCCDRateHz   = 30; 
+qImagingCCDRateHz   = 30;
 % Send triggers for Mightex (rate is defined by trigger rate)
-triggerMightexCam   = 1;
+triggerMightexCam = 1;
 mightexCameraRateHz = 15;
 % Sent start trigger for Point Grey camera acquisition (rate potentially
 % defined by other software)
@@ -70,12 +71,14 @@ logFileID = fopen(fullfile(daqSaveDir,daqSaveFile),'w');
 niIn.addlistener('DataAvailable',@(src,evt)logDaqData(src,evt,logFileID));
 
 % Add Analog Channels / names for documentation
-aI = niIn.addAnalogInputChannel(devID,[0 1 2 3 4],'Voltage');
+aI = niIn.addAnalogInputChannel(devID,[0 1 2 3 4 5 6],'Voltage');
 aI(1).Name = 'LED Stim Output';
 aI(2).Name = 'Psych Toolbox Output';
 aI(3).Name = 'Lick Port Output';
 aI(4).Name = 'Reward (To Solenoid 1)';
 aI(5).Name = 'Punishment (To Solenoid 2)';
+aI(6).Name = 'EEG (Left hemisphere)';
+aI(7).Name = 'EEG (Right hemisphere)';
 
 % Add Digital Channels / names for documentation
 dIO = niIn.addDigitalChannel(devID,{'Port0/Line0:7'},'Bidirectional');
@@ -111,6 +114,9 @@ dTrig(4).Name = 'none'; % Save for future use
 cIBall = niIn.addCounterInputChannel(devID,[3],'Position');
 cIBall.EncoderType = 'X1';
 cIBall(1).Name = 'Ball Quadrature';
+% This ensures that each time we actually get data, still a good idea to
+% reset power to the ball prior to acquisition
+cIBall.resetCounter;
 
 % Counter for the strobe off the Mightex Camera -- potentially unused
 % CTR 0 'EdgeCount' - PFI8
@@ -201,16 +207,16 @@ fprintf('Loading logged data into workspace... ')
 logFileID = fopen(fullfile(daqSaveDir,daqSaveFile),'r');
 
 nDaqChans = numel(dIO) + numel(aI) + numel(cIBall) + numel(cICam);
-exp.Data = fread(logFileID,'double');
-exp.Data = reshape(exp.Data,nDaqChans+1,[]);
-exp.Count = exp.Data(1,:);
-exp.Data = exp.Data(2:end,:);
+daq.Data  = fread(logFileID,'double');
+daq.Data  = reshape(daq.Data,nDaqChans+1,[]);
+daq.Count = daq.Data(1,:);
+daq.Data  = daq.Data(2:end,:);
 [~] = fclose(logFileID);
 
-exp.daqRate     = niIn.Rate;
-exp.daqInIDs    = {niIn.Channels(:).ID};
-exp.daqInNames  = {niIn.Channels(:).Name};
+daq.daqRate     = niIn.Rate;
+daq.daqInIDs    = {niIn.Channels(:).ID};
+daq.daqInNames  = {niIn.Channels(:).Name};
 
-save(fullfile(daqSaveDir,matSaveFile),'exp','-v7.3');
+save(fullfile(daqSaveDir,matSaveFile),'daq','-v7.3');
 fprintf('saved as .mat file.\n')
 fprintf('\tdaqMatFile: ..%s%s\n\n', filesep, matSaveFile);
