@@ -29,7 +29,7 @@ end
 % Edit for each animal/experiment change
 %--------------------------------------------------------------------------
 animalName  = 'K51';
-expName     = 'ChR2';
+expName     = 'ChR2-v3';
 
 % Send triggers for qimaging acquisition @ some rate (rate potentially
 % determined by other software) currently unimplemented
